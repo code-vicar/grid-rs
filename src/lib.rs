@@ -1,7 +1,7 @@
-mod cell;
 mod grid;
+mod mazes;
 
 pub mod prelude {
-  pub use super::cell::*;
   pub use super::grid::*;
+  pub use super::mazes::*;
 }

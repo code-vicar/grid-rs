@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 gust = { path = "../gust", version = "0.1.0" }
+rand = "0.6.0"

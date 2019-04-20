@@ -25,8 +25,70 @@ fn iterate_cells() {
 #[test]
 fn get_cell_at() {
   let grid = make_grid();
-  let some_cell = grid.cell_at(1, 1);
-  assert_eq!("1_1", some_cell.unwrap().get_id());
-  let none_cell = grid.cell_at(10, 1);
+  let some_cell = grid.cell_at(GridCoords {
+    col_index: 0,
+    row_index: 0
+  });
+  assert_eq!("0_0", some_cell.unwrap().get_id());
+  let none_cell = grid.cell_at(GridCoords {
+    col_index: 10,
+    row_index: 1
+  });
   assert!(none_cell.is_none());
+}
+
+#[test]
+fn get_links() {
+  let mut grid = make_grid();
+  let pos = GridCoords {
+    col_index: 0,
+    row_index: 0
+  };
+  grid.link_bidi(pos, grid.north(pos).unwrap());
+  let edges = grid.links(pos);
+  assert_eq!(1, edges.len());
+  assert_eq!("0_0", edges[0].from);
+  assert_eq!("1_0", edges[0].to);
+}
+
+#[test]
+fn get_neighbors() {
+  let grid = make_grid();
+  let pos = GridCoords {
+    col_index: 0,
+    row_index: 0
+  };
+  let neighbors = grid.neighbors(pos);
+  assert!(neighbors.south.is_boundary());
+  assert!(neighbors.west.is_boundary());
+  assert!(neighbors.north.is_cell());
+  assert!(neighbors.east.is_cell());
+}
+
+#[ignore]
+#[test]
+fn get_random() {
+  let grid = make_grid();
+  let cell = grid.rand_cell();
+  println!("{:#?}", cell)
+}
+
+#[test]
+fn each_row() {
+  let grid = make_grid();
+
+  grid.each_row(|row| {
+    let (_, loc) = row[0];
+    assert_eq!(grid.width(), row.len());
+    assert_eq!(0, loc.col_index);
+  });
+}
+
+#[test]
+fn binary_tree_maze() {
+  let grid = make_grid();
+
+  let grid = binarytree::apply_to(grid);
+
+  println!("{}", grid);
 }
