@@ -128,7 +128,7 @@ impl Grid {
   }
 
   fn _each_row<F>(&self, mut f: F, reverse: bool)
-    where F: (FnMut(&[(&Cell, GridCoords)]))
+    where F: (FnMut(&[(&Cell, GridCoords)], usize))
   {
     if self.height == 0 {
       return;
@@ -149,18 +149,18 @@ impl Grid {
         let cell = self.cell_at(loc).unwrap();
         (cell, loc)
       }).collect();
-      f(row_cells.as_slice());
+      f(row_cells.as_slice(), idx);
     }
   }
 
   pub fn each_row<F>(&self, f: F)
-    where F: (FnMut(&[(&Cell, GridCoords)]))
+    where F: (FnMut(&[(&Cell, GridCoords)], usize))
   {
     self._each_row(f, false);
   }
 
   pub fn each_row_reverse<F>(&self, f: F)
-    where F: (FnMut(&[(&Cell, GridCoords)]))
+    where F: (FnMut(&[(&Cell, GridCoords)], usize))
   {
     self._each_row(f, true);
   }
@@ -283,7 +283,7 @@ impl fmt::Display for Grid {
     let top_border = String::from("---+").repeat(self.width);
     let mut lines = vec![format!("{}{}", top_corner, top_border)];
 
-    self.each_row_reverse(|row| {
+    self.each_row_reverse(|row, _| {
       let mut top = String::new();
       let mut bottom = String::new();
 

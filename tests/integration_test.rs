@@ -77,18 +77,29 @@ fn get_random() {
 fn each_row() {
   let grid = make_grid();
 
-  grid.each_row(|row| {
+  grid.each_row(|row, _| {
     let (_, loc) = row[0];
     assert_eq!(grid.width(), row.len());
     assert_eq!(0, loc.col_index);
   });
 }
 
+#[ignore]
 #[test]
 fn binary_tree_maze() {
   let grid = make_grid();
 
   let grid = binarytree::apply_to(grid);
+
+  println!("{}", grid);
+}
+
+#[ignore]
+#[test]
+fn sidewinder_tree_maze() {
+  let grid = make_grid();
+
+  let grid = sidewinder::apply_to(grid);
 
   println!("{}", grid);
 }
