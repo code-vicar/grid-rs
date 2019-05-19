@@ -1,5 +1,9 @@
 mod cell;
+
 use gust::{Graph, GraphBuilder, Edge};
+use line_rs::*;
+use try_from::{TryFrom};
+// use image::{GenericImageView, ImageBuffer, RgbImage, imageops};
 use rand::Rng;
 use std::fmt;
 pub use cell::*;
@@ -274,6 +278,25 @@ impl Grid {
       col_index: pos.col_index - 1,
       ..pos
     })
+  }
+
+  fn draw_line(mut img: image::RgbImage, (x1, y1): (u32, u32), (x2, y2): (u32, u32)) -> image::RgbImage {
+    let p1 = bresenham::Point::new(isize::try_from(x1).unwrap(), isize::try_from(y1).unwrap());
+    let p2 = bresenham::Point::new(isize::try_from(x2).unwrap(), isize::try_from(y2).unwrap());
+    let line = bresenham::calculate_line(p1, p2);
+    let black = image::Rgb { data: [0, 0, 0] };
+    for point in line {
+      img.put_pixel(u32::try_from(point.x).unwrap(), u32::try_from(point.y).unwrap(), black);
+    };
+    return img
+  }
+
+  pub fn to_img(&self, path: &str) {
+    let white = image::Rgb { data: [255, 255, 255] };
+    let img: image::RgbImage = image::ImageBuffer::from_pixel(110, 110, white);
+    let img = Grid::draw_line(img, (5, 5), (5, 10));
+    // Write the contents of this image to the Writer in PNG format.
+    img.save(path).unwrap();
   }
 }
 
