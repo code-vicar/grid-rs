@@ -109,6 +109,6 @@ fn to_image_test() {
   let grid = make_grid();
 
   let grid = sidewinder::apply_to(grid);
-
-  grid.to_img("test-output/test.png");
+  println!("{}", grid);
+  grid.to_img("test-output/test.png", 5);
 }

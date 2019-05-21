@@ -9,4 +9,3 @@ gust = { path = "../gust", version = "0.1.0" }
 line-rs = { path = "../line-rs", version = "0.1.0" }
 rand = "0.6.0"
 image = "0.21.1"
-try_from = "0.3.2"

@@ -1,11 +1,10 @@
 mod cell;
 
+use std::fmt;
+use std::convert::TryFrom;
 use gust::{Graph, GraphBuilder, Edge};
 use line_rs::*;
-use try_from::{TryFrom};
-// use image::{GenericImageView, ImageBuffer, RgbImage, imageops};
 use rand::Rng;
-use std::fmt;
 pub use cell::*;
 
 #[derive(Debug)]
@@ -280,22 +279,91 @@ impl Grid {
     })
   }
 
-  fn draw_line(mut img: image::RgbImage, (x1, y1): (u32, u32), (x2, y2): (u32, u32)) -> image::RgbImage {
-    let p1 = bresenham::Point::new(isize::try_from(x1).unwrap(), isize::try_from(y1).unwrap());
-    let p2 = bresenham::Point::new(isize::try_from(x2).unwrap(), isize::try_from(y2).unwrap());
+  fn draw_line(mut img: image::RgbImage, color: image::Rgb<u8>, (x1, y1): (u32, u32), (x2, y2): (u32, u32)) -> image::RgbImage {
+    let p1 = bresenham::Point::new(x1, y1);
+    let p2 = bresenham::Point::new(x2, y2);
     let line = bresenham::calculate_line(p1, p2);
-    let black = image::Rgb { data: [0, 0, 0] };
     for point in line {
-      img.put_pixel(u32::try_from(point.x).unwrap(), u32::try_from(point.y).unwrap(), black);
+      img.put_pixel(point.x, point.y, color);
     };
-    return img
+    img
   }
 
-  pub fn to_img(&self, path: &str) {
+  pub fn to_img(&self, path: &str, cell_size: u32) {
+    let padding_px = 5;
+    let padding_total = padding_px * 2;
+
+    let grid_width_u32;
+    if let Ok(width_u32) = u32::try_from(self.width) {
+      grid_width_u32 = width_u32
+    } else {
+      panic!("Grid width is too large to convert into an image (u32 max)")
+    }
+
+    let grid_height_u32;
+    if let Ok(height_u32) = u32::try_from(self.width) {
+      grid_height_u32 = height_u32
+    } else {
+      panic!("Grid height is too large to convert into an image (u32 max)")
+    }
+
+    let grid_width = (grid_width_u32 * cell_size) + padding_total;
+    let grid_height = (grid_height_u32 * cell_size) + padding_total;
+
     let white = image::Rgb { data: [255, 255, 255] };
-    let img: image::RgbImage = image::ImageBuffer::from_pixel(110, 110, white);
-    let img = Grid::draw_line(img, (5, 5), (5, 10));
-    // Write the contents of this image to the Writer in PNG format.
+    let black = image::Rgb { data: [0, 0, 0] };
+
+    let mut img: image::RgbImage = image::ImageBuffer::from_pixel(grid_width, grid_height, white);
+    for row_index in 0..self.height {
+      for col_index in 0..self.width {
+        let coords = GridCoords {
+          col_index,
+          row_index
+        };
+        let neighbors = self.neighbors(coords.to_owned());
+        let links = self.links(coords.to_owned());
+
+        let origin_x = (u32::try_from(coords.col_index).unwrap() * cell_size) + padding_px;
+        let origin_y = (u32::try_from(coords.row_index).unwrap() * cell_size) + padding_px;
+        let left_wall_y = origin_y + cell_size;
+        let bot_wall_x = origin_x + cell_size;
+
+        match neighbors.west {
+          Neighbor::GridBoundary => {
+            img = Grid::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
+          },
+          Neighbor::NeighborCell((neighbor_coords, _)) => {
+            if !links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
+              img = Grid::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
+            }
+          }
+        }
+
+        match neighbors.south {
+          Neighbor::GridBoundary => {
+            img = Grid::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
+          },
+          Neighbor::NeighborCell((neighbor_coords, _)) => {
+            if !links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
+              img = Grid::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
+            }
+          }
+        }
+      }
+    }
+
+    let top_y = padding_px + (grid_height_u32 * cell_size);
+    let top_x = padding_px;
+    let top_x2 = padding_px + (grid_width_u32 * cell_size);
+    img = Grid::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
+
+    let right_y = padding_px;
+    let right_x = padding_px + (grid_width_u32 * cell_size);
+    let right_y2 = padding_px + (grid_height_u32 * cell_size);
+    img = Grid::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
+
+    img = image::imageops::flip_vertical(&img);
+
     img.save(path).unwrap();
   }
 }
