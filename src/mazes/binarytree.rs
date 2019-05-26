@@ -1,34 +1,31 @@
-use crate::grid::{Grid, GridCoords, GridPosition};
+use crate::grid::Grid;
+use crate::grid::cell::GridCell;
 use rand::Rng;
 use super::CoinFlip;
 
-pub fn apply_to(grid: Grid) -> Grid {
-  let mut to_link: Vec<(GridCoords, GridCoords)> = Vec::new();
-  grid.each_cell(|(_, current_coords)| {
-    let north_pos = grid.north(current_coords);
-    let east_pos = grid.east(current_coords);
+pub fn apply_to<C: GridCell + std::fmt::Debug>(mut grid: Grid<C>) -> Grid<C> {
+  for id in grid.cell_ids() {
+    let cell = grid.cell_at(&id).unwrap();
+    let north = grid.north_id(cell);
+    let east = grid.east_id(cell);
     match rand::thread_rng().gen::<CoinFlip>() {
       CoinFlip::Heads => {
         // try north first
-        if let GridPosition::InBounds(north_coords) = north_pos {
-          to_link.push((current_coords, north_coords));
-        } else if let GridPosition::InBounds(east_coords) = east_pos {
-          to_link.push((current_coords, east_coords));
+        if let Some(north_id) = north {
+          grid.link_bidi(&id, &north_id);
+        } else if let Some(east_id) = east {
+          grid.link_bidi(&id, &east_id);
         }
       }
       CoinFlip::Tails => {
         // try east first
-        if let GridPosition::InBounds(east_coords) = east_pos {
-          to_link.push((current_coords, east_coords));
-        } else if let GridPosition::InBounds(north_coords) = north_pos {
-          to_link.push((current_coords, north_coords));
+        if let Some(east_id) = east {
+          grid.link_bidi(&id, &east_id);
+        } else if let Some(north_id) = north {
+          grid.link_bidi(&id, &north_id);
         }
       }
     }
-  });
-  let mut grid = grid;
-  for (source, dest) in to_link {
-    grid.link_bidi(source, dest);
   }
   grid
 }

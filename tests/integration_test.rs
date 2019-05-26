@@ -1,7 +1,7 @@
 extern crate grid;
 use grid::prelude::*;
 
-fn make_grid() -> Grid {
+fn make_grid() -> Grid<Cell> {
   let grid = Grid::new(10, 10);
   grid
 }
@@ -15,54 +15,58 @@ fn graph_len() {
 #[test]
 fn iterate_cells() {
   let grid = make_grid();
-  let mut counter = 0;
-  grid.each_cell(|_| {
-    counter = counter + 1;
-  });
-  assert_eq!(100, counter);
+  assert_eq!(100, grid.cells().len());
 }
 
 #[test]
 fn get_cell_at() {
   let grid = make_grid();
-  let some_cell = grid.cell_at(GridCoords {
+  let coords = GridCoords {
     col_index: 0,
     row_index: 0
-  });
-  assert_eq!("0_0", some_cell.unwrap().get_id());
-  let none_cell = grid.cell_at(GridCoords {
+  };
+  let some_cell = grid.cell_at(&coords);
+  assert_eq!(&coords, some_cell.unwrap().get_id());
+  let invalid_coords = GridCoords {
     col_index: 10,
     row_index: 1
-  });
+  };
+  let none_cell = grid.cell_at(&invalid_coords);
   assert!(none_cell.is_none());
 }
 
 #[test]
 fn get_links() {
   let mut grid = make_grid();
-  let pos = GridCoords {
+  let id = GridCoords {
     col_index: 0,
     row_index: 0
   };
-  grid.link_bidi(pos, grid.north(pos).unwrap());
-  let edges = grid.links(pos);
+  // do mutable borrows
+  let cell = grid.cell_at(&id).unwrap();
+  let north_id = grid.north_id(&cell).unwrap();
+  grid.link_bidi(&id, &north_id);
+  // switch to non mutable borrow
+  let grid = grid;
+  let cell = grid.cell_at(&id).unwrap();
+  let edges = grid.links(cell);
   assert_eq!(1, edges.len());
-  assert_eq!("0_0", edges[0].from);
-  assert_eq!("1_0", edges[0].to);
+  assert!(edges[0].leads_from_to(&id, &north_id));
 }
 
 #[test]
 fn get_neighbors() {
   let grid = make_grid();
-  let pos = GridCoords {
+  let id = GridCoords {
     col_index: 0,
     row_index: 0
   };
-  let neighbors = grid.neighbors(pos);
-  assert!(neighbors.south.is_boundary());
-  assert!(neighbors.west.is_boundary());
-  assert!(neighbors.north.is_cell());
-  assert!(neighbors.east.is_cell());
+  let cell = grid.cell_at(&id).unwrap();
+  let neighbors = grid.neighbors(cell);
+  assert!(neighbors.south.is_none());
+  assert!(neighbors.west.is_none());
+  assert!(neighbors.north.is_some());
+  assert!(neighbors.east.is_some());
 }
 
 #[ignore]
@@ -77,11 +81,10 @@ fn get_random() {
 fn each_row() {
   let grid = make_grid();
 
-  grid.each_row(|row, _| {
-    let (_, loc) = row[0];
+  for row in grid.rows() {
     assert_eq!(grid.width(), row.len());
-    assert_eq!(0, loc.col_index);
-  });
+    assert_eq!(0, row[0].col_index);
+  };
 }
 
 #[ignore]
@@ -94,6 +97,15 @@ fn binary_tree_maze() {
   println!("{}", grid);
 }
 
+#[test]
+fn binary_tree_maze_to_image_test() {
+  let grid = make_grid();
+
+  let grid = binarytree::apply_to(grid);
+  println!("{}", grid);
+  grid.to_img("test-output/test.png", 5);
+}
+
 #[ignore]
 #[test]
 fn sidewinder_tree_maze() {
@@ -104,6 +116,7 @@ fn sidewinder_tree_maze() {
   println!("{}", grid);
 }
 
+#[ignore]
 #[test]
 fn to_image_test() {
   let grid = make_grid();

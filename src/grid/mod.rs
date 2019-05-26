@@ -1,140 +1,66 @@
-mod cell;
+pub mod cell;
 
+use std::collections::HashMap;
 use std::fmt;
 use std::convert::TryFrom;
-use gust::{Graph, GraphBuilder, Edge};
+use gust::{Graph, Edge};
 use line_rs::*;
 use rand::Rng;
-pub use cell::*;
+use cell::{HasID, GridCoords, GridCell};
 
 #[derive(Debug)]
-pub struct EdgeData {}
-
-#[derive(Debug, Clone, Copy)]
-pub enum GridPosition {
-  InBounds(GridCoords),
-  OutOfBounds
-}
-
-impl GridPosition {
-  pub fn unwrap(&self) -> GridCoords {
-    match self {
-      GridPosition::InBounds(coords) => coords.to_owned(),
-      _ => panic!()
-    }
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GridCoords {
-  pub col_index: usize,
-  pub row_index: usize
+pub struct Neighbors<'a, C: GridCell + std::fmt::Debug> {
+  pub north: Option<&'a C>,
+  pub east: Option<&'a C>,
+  pub south: Option<&'a C>,
+  pub west: Option<&'a C>
 }
 
 #[derive(Debug)]
-pub enum Neighbor<'a> {
-  NeighborCell((GridCoords, &'a Cell)),
-  GridBoundary
-}
-
-impl<'a> Neighbor<'a> {
-  pub fn is_cell(&self) -> bool {
-    match self {
-      Neighbor::NeighborCell(_) => true,
-      _ => false
-    }
-  }
-
-  pub fn is_boundary(&self) -> bool {
-    match self {
-      Neighbor::GridBoundary => true,
-      _ => false
-    }
-  }
-}
-
-#[derive(Debug)]
-pub struct Neighbors<'a> {
-  pub north: Neighbor<'a>,
-  pub east: Neighbor<'a>,
-  pub south: Neighbor<'a>,
-  pub west: Neighbor<'a>
-}
-
-impl<'a> Neighbors<'a> {
-  pub fn new() -> Neighbors<'a> {
-    Neighbors {
-      north: Neighbor::GridBoundary,
-      east: Neighbor::GridBoundary,
-      south: Neighbor::GridBoundary,
-      west: Neighbor::GridBoundary
-    }
-  }
-
-  pub fn set(&mut self, dir: &str, n: Neighbor<'a>) {
-    match dir {
-      "north" => self.north = n,
-      "east" => self.east = n,
-      "south" => self.south = n,
-      "west" => self.west = n,
-      _ => ()
-    }
-  }
-}
-
-#[derive(Debug)]
-pub struct Grid {
+pub struct Grid<C: GridCell + std::fmt::Debug> {
   height: usize,
   width: usize,
-  graph: Graph<Cell, EdgeData>,
+  cells: HashMap<<C as HasID>::ID_TYPE, C>,
+  graph: Graph<C>,
 }
 
-impl Grid {
-  pub fn new(height: usize, width: usize) -> Grid {
-    let mut vertices = Vec::new();
-    for col_index in 0..width {
-      for row_index in 0..height {
-        let cell = Cell::new(Grid::cell_id_from_location(GridCoords {
-          col_index,
-          row_index
-        }));
-        vertices.push(cell);
-      }
-    }
-
-    Grid {
+impl<C: GridCell + std::fmt::Debug> Grid<C> {
+  pub fn new(height: usize, width: usize) -> Grid<C> {
+    let mut grid = Grid {
       height,
       width,
-      graph: GraphBuilder::new().with_vertices(vertices).build()
+      cells: HashMap::new(),
+      graph: Graph::new(),
+    };
+    for col_index in 0..width {
+      for row_index in 0..height {
+        let coords = GridCoords {
+          col_index,
+          row_index
+        };
+        let cell = C::new_from_id(C::coords_as_id(coords));
+        grid.cells.insert(cell.get_id().clone(), cell);
+      }
     }
+    grid
   }
 
-  fn cell_id_from_location(pos: GridCoords) -> <Cell as HasID>::ID_TYPE {
-    format!("{}_{}", pos.row_index, pos.col_index)
+  pub fn cells(&self) -> &HashMap<<C as HasID>::ID_TYPE, C> {
+    &self.cells
   }
 
-  fn location_from_cell_id(cell_id: &String) -> GridCoords {
-    let parts: Vec<&str> = cell_id.as_str().split("_").collect();
-
-    let row_index = parts[0].parse::<usize>().unwrap();
-    let col_index = parts[1].parse::<usize>().unwrap();
-
-    GridCoords {
-      row_index,
-      col_index
-    }
+  pub fn cell_ids(&self) -> Vec<<C as HasID>::ID_TYPE> {
+    self.cells.iter().map(|(cell_id, _)| cell_id.clone()).collect()
   }
 
-  pub fn cell_at(&self, pos: GridCoords) -> Option<&Cell> {
-    let key = Grid::cell_id_from_location(pos);
-    self.graph.vertices().get(&key)
+  pub fn cell_at(&self, cell_id: &<C as HasID>::ID_TYPE) -> Option<&C> {
+    self.cells.get(cell_id)
   }
 
-  fn _each_row<F>(&self, mut f: F, reverse: bool)
-    where F: (FnMut(&[(&Cell, GridCoords)], usize))
-  {
+  fn _each_row(&self, reverse: bool) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+    let mut rows = Vec::new();
     if self.height == 0 {
-      return;
+      return rows;
     }
     let height_max_index = self.height - 1;
     for idx in 0..self.height {
@@ -144,91 +70,56 @@ impl Grid {
       } else {
         row_index = idx;
       }
-      let row_cells: Vec<(&Cell, GridCoords)> = (0..self.width).map(|col_index| {
-        let loc = GridCoords {
-          col_index,
-          row_index
-        };
-        let cell = self.cell_at(loc).unwrap();
-        (cell, loc)
-      }).collect();
-      f(row_cells.as_slice(), idx);
-    }
-  }
-
-  pub fn each_row<F>(&self, f: F)
-    where F: (FnMut(&[(&Cell, GridCoords)], usize))
-  {
-    self._each_row(f, false);
-  }
-
-  pub fn each_row_reverse<F>(&self, f: F)
-    where F: (FnMut(&[(&Cell, GridCoords)], usize))
-  {
-    self._each_row(f, true);
-  }
-
-  pub fn each_cell<F>(&self, mut f: F)
-    where F: (FnMut((&Cell, GridCoords)))
-  {
-    for row_index in 0..self.height {
+      let mut ids = Vec::new();
       for col_index in 0..self.width {
-        let loc = GridCoords {
+        ids.push(C::coords_as_id(GridCoords {
           col_index,
           row_index
-        };
-        let cell = self.cell_at(loc).unwrap();
-        f((cell, loc));
+        }));
       }
+      rows.push(ids);
     }
+    rows
   }
 
-  pub fn rand_cell(&self) -> &Cell {
+  pub fn rows(&self) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+    self._each_row(false)
+  }
+
+  pub fn rows_reverse(&self) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+    self._each_row(true)
+  }
+
+  pub fn rand_cell(&self) -> &C {
      let row_index = rand::thread_rng().gen_range(0, self.width);
      let col_index = rand::thread_rng().gen_range(0, self.height);
      // we can unwrap here since the calculation is
      // bound to the size of the grid
-     self.cell_at(GridCoords {
+     self.cell_at(&C::coords_as_id(GridCoords {
         row_index,
         col_index
-     }).unwrap()
+     })).unwrap()
   }
 
-  pub fn neighbors(&self, pos: GridCoords) -> Neighbors {
-    let mut neighbors = Neighbors::new();
-    let neighbor_positions = vec![
-      ("north", self.north(pos)),
-      ("east", self.east(pos)),
-      ("south", self.south(pos)),
-      ("west", self.west(pos))
-    ];
-    for neighbor_position in neighbor_positions {
-      let (dir, neighbor_position) = neighbor_position;
-      if let GridPosition::InBounds(loc) = neighbor_position {
-        if let Some(cell) = self.cell_at(loc) {
-          neighbors.set(dir, Neighbor::NeighborCell((loc, cell)));
-        }
-      }
+  pub fn neighbors(&self, cell: &C) -> Neighbors<C> {
+    Neighbors {
+      north: self.north(cell),
+      east: self.east(cell),
+      south: self.south(cell),
+      west: self.west(cell),
     }
-    neighbors
   }
 
-  pub fn links(&self, pos: GridCoords) -> &[Edge<Cell, EdgeData>] {
-    let id = Grid::cell_id_from_location(pos);
-    self.graph.get_adjacent(&id)
+  pub fn links(&self, cell: &C) -> Vec<&Edge<C>> {
+    self.graph.get_adjacent(cell.get_id())
   }
 
-  pub fn link(&mut self, source: GridCoords, destination: GridCoords) {
-    let s = Grid::cell_id_from_location(source);
-    let d = Grid::cell_id_from_location(destination);
-    self.graph.add_edge(&s, &d);
+  pub fn link(&mut self, source: &C::ID_TYPE, destination: &C::ID_TYPE) {
+    self.graph.add_edge(source.clone(), destination.clone());
   }
 
-  pub fn link_bidi(&mut self, source: GridCoords, destination: GridCoords) {
-    let s = Grid::cell_id_from_location(source);
-    let d = Grid::cell_id_from_location(destination);
-    self.graph.add_edge(&s, &d);
-    self.graph.add_edge(&d, &s);
+  pub fn link_bidi(&mut self, source: &C::ID_TYPE, destination: &C::ID_TYPE) {
+    self.graph.add_edge_bidi(source.clone(), destination.clone());
   }
 
   pub fn height(&self) -> usize {
@@ -239,44 +130,86 @@ impl Grid {
     self.width
   }
 
-  pub fn north(&self, pos: GridCoords) -> GridPosition {
-    if pos.row_index == usize::max_value() || (pos.row_index + 1) == self.height {
-      return GridPosition::OutOfBounds
+  pub fn north(&self, cell: &C) -> Option<&C> {
+    let north_coords = cell.north_coords();
+    match north_coords {
+      Some(coords) => {
+        if coords.row_index >= self.height {
+          return None
+        }
+        self.cell_at(&C::coords_as_id(coords))
+      }
+      None => None
     }
-    GridPosition::InBounds(GridCoords {
-      row_index: pos.row_index + 1,
-      ..pos
-    })
   }
 
-  pub fn east(&self, pos: GridCoords) -> GridPosition {
-    if pos.col_index == usize::max_value() || (pos.col_index + 1) == self.width {
-      return GridPosition::OutOfBounds
+  pub fn north_id(&self, cell: &C) -> Option<C::ID_TYPE> {
+    match self.north(cell) {
+      Some(cell) => {
+        Some(cell.get_id().clone())
+      }
+      None => None
     }
-    GridPosition::InBounds(GridCoords {
-      col_index: pos.col_index + 1,
-      ..pos
-    })
   }
 
-  pub fn south(&self, pos: GridCoords) -> GridPosition {
-    if pos.row_index == usize::min_value() {
-      return GridPosition::OutOfBounds
+  pub fn east(&self, cell: &C) -> Option<&C> {
+    let east_coords = cell.east_coords();
+    match east_coords {
+      Some(coords) => {
+        if coords.col_index >= self.width {
+          return None
+        }
+        self.cell_at(&C::coords_as_id(coords))
+      }
+      None => None
     }
-    GridPosition::InBounds(GridCoords {
-      row_index: pos.row_index - 1,
-      ..pos
-    })
   }
 
-  pub fn west(&self, pos: GridCoords) -> GridPosition {
-    if pos.col_index == usize::min_value() {
-      return GridPosition::OutOfBounds
+  pub fn east_id(&self, cell: &C) -> Option<C::ID_TYPE> {
+    match self.east(cell) {
+      Some(cell) => {
+        Some(cell.get_id().clone())
+      }
+      None => None
     }
-    GridPosition::InBounds(GridCoords {
-      col_index: pos.col_index - 1,
-      ..pos
-    })
+  }
+
+  pub fn south(&self, cell: &C) -> Option<&C> {
+    let south_coords = cell.south_coords();
+    match south_coords {
+      Some(coords) => {
+        self.cell_at(&C::coords_as_id(coords))
+      }
+      None => None
+    }
+  }
+
+  pub fn south_id(&self, cell: &C) -> Option<C::ID_TYPE> {
+    match self.south(cell) {
+      Some(cell) => {
+        Some(cell.get_id().clone())
+      }
+      None => None
+    }
+  }
+
+  pub fn west(&self, cell: &C) -> Option<&C> {
+    let west_coords = cell.west_coords();
+    match west_coords {
+      Some(coords) => {
+        self.cell_at(&C::coords_as_id(coords))
+      }
+      None => None
+    }
+  }
+
+  pub fn west_id(&self, cell: &C) -> Option<C::ID_TYPE> {
+    match self.west(cell) {
+      Some(cell) => {
+        Some(cell.get_id().clone())
+      }
+      None => None
+    }
   }
 
   fn draw_line(mut img: image::RgbImage, color: image::Rgb<u8>, (x1, y1): (u32, u32), (x2, y2): (u32, u32)) -> image::RgbImage {
@@ -314,40 +247,35 @@ impl Grid {
     let black = image::Rgb { data: [0, 0, 0] };
 
     let mut img: image::RgbImage = image::ImageBuffer::from_pixel(grid_width, grid_height, white);
-    for row_index in 0..self.height {
-      for col_index in 0..self.width {
-        let coords = GridCoords {
-          col_index,
-          row_index
-        };
-        let neighbors = self.neighbors(coords.to_owned());
-        let links = self.links(coords.to_owned());
+    for (cell_id, cell) in self.cells.iter() {
+      let neighbors = self.neighbors(cell);
+      let links = self.links(cell);
 
-        let origin_x = (u32::try_from(coords.col_index).unwrap() * cell_size) + padding_px;
-        let origin_y = (u32::try_from(coords.row_index).unwrap() * cell_size) + padding_px;
-        let left_wall_y = origin_y + cell_size;
-        let bot_wall_x = origin_x + cell_size;
+      let coords = cell.coords();
+      let origin_x = (u32::try_from(coords.col_index).unwrap() * cell_size) + padding_px;
+      let origin_y = (u32::try_from(coords.row_index).unwrap() * cell_size) + padding_px;
+      let left_wall_y = origin_y + cell_size;
+      let bot_wall_x = origin_x + cell_size;
 
-        match neighbors.west {
-          Neighbor::GridBoundary => {
-            img = Grid::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
-          },
-          Neighbor::NeighborCell((neighbor_coords, _)) => {
-            if !links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
-              img = Grid::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
-            }
+      match neighbors.west {
+        Some(west) => {
+          if !links.iter().any(|link| link.leads_from_to(cell_id, west.get_id())) {
+            img = Self::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
           }
+        },
+        None => {
+          img = Self::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
         }
+      }
 
-        match neighbors.south {
-          Neighbor::GridBoundary => {
-            img = Grid::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
-          },
-          Neighbor::NeighborCell((neighbor_coords, _)) => {
-            if !links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
-              img = Grid::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
-            }
+      match neighbors.south {
+        Some(south) => {
+          if !links.iter().any(|link| link.leads_from_to(cell_id, south.get_id())) {
+            img = Self::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
           }
+        },
+        None => {
+          img = Self::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
         }
       }
     }
@@ -355,12 +283,12 @@ impl Grid {
     let top_y = padding_px + (grid_height_u32 * cell_size);
     let top_x = padding_px;
     let top_x2 = padding_px + (grid_width_u32 * cell_size);
-    img = Grid::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
+    img = Self::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
 
     let right_y = padding_px;
     let right_x = padding_px + (grid_width_u32 * cell_size);
     let right_y2 = padding_px + (grid_height_u32 * cell_size);
-    img = Grid::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
+    img = Self::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
 
     img = image::imageops::flip_vertical(&img);
 
@@ -368,26 +296,27 @@ impl Grid {
   }
 }
 
-impl fmt::Display for Grid {
+impl<C: GridCell + std::fmt::Debug> fmt::Display for Grid<C> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let top_corner = String::from("+");
     let top_border = String::from("---+").repeat(self.width);
     let mut lines = vec![format!("{}{}", top_corner, top_border)];
 
-    self.each_row_reverse(|row, _| {
+    let rows = self.rows_reverse();
+    for row in rows {
       let mut top = String::new();
       let mut bottom = String::new();
 
-      for (_, coords) in row {
-        let neighbors = self.neighbors(coords.to_owned());
-        let links = self.links(coords.to_owned());
+      for cell_id in row {
+        let neighbors = self.neighbors(self.cell_at(&cell_id).unwrap());
+        let links = self.links(self.cell_at(&cell_id).unwrap());
 
         match neighbors.west {
-          Neighbor::GridBoundary => {
+          None => {
             top.push_str("|");
           },
-          Neighbor::NeighborCell((neighbor_coords, _)) => {
-            if links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
+          Some(cell) => {
+            if links.iter().any(|link| link.leads_to(cell.get_id())) {
               top.push_str(" ");
             } else {
               top.push_str("|");
@@ -398,11 +327,11 @@ impl fmt::Display for Grid {
 
         top.push_str("   ");
         match neighbors.south {
-          Neighbor::GridBoundary => {
+          None => {
             bottom.push_str("---");
           },
-          Neighbor::NeighborCell((neighbor_coords, _)) => {
-            if links.iter().any(|link| Grid::location_from_cell_id(&link.to) == neighbor_coords) {
+          Some(cell) => {
+            if links.iter().any(|link| link.leads_to(cell.get_id())) {
               bottom.push_str("   ");
             } else {
               bottom.push_str("---");
@@ -415,7 +344,7 @@ impl fmt::Display for Grid {
       bottom.push_str("+");
       lines.push(top);
       lines.push(bottom);
-    });
+    }
 
     for line in lines {
       if let Result::Err(e) = writeln!(f, "{}", line) {
