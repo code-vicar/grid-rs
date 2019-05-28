@@ -1,5 +1,6 @@
 pub mod binarytree;
 pub mod sidewinder;
+pub mod solutions;
 use rand::Rng;
 use rand::distributions::{Distribution, Standard};
 

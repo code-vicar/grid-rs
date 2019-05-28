@@ -51,7 +51,7 @@ fn get_links() {
   let cell = grid.cell_at(&id).unwrap();
   let edges = grid.links(cell);
   assert_eq!(1, edges.len());
-  assert!(edges[0].leads_from_to(&id, &north_id));
+  assert_eq!(edges[0], &north_id);
 }
 
 #[test]
@@ -97,6 +97,7 @@ fn binary_tree_maze() {
   println!("{}", grid);
 }
 
+#[ignore]
 #[test]
 fn binary_tree_maze_to_image_test() {
   let grid = make_grid();
@@ -124,4 +125,23 @@ fn to_image_test() {
   let grid = sidewinder::apply_to(grid);
   println!("{}", grid);
   grid.to_img("test-output/test.png", 5);
+}
+
+#[test]
+fn shortest_path() {
+  let grid = make_grid();
+
+  let grid = sidewinder::apply_to(grid);
+  let source = GridCoords {
+    row_index: 0,
+    col_index: 0,
+  };
+  let destination = GridCoords {
+    row_index: 1,
+    col_index: 1,
+  };
+  let distances = solutions::dijkstra::Dijkstra::new(&grid, &source);
+  println!("Done calculating distances");
+  println!("{}", grid);
+  println!("{:#?}", distances.shortest_path_to(&grid, &destination))
 }

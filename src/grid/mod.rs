@@ -3,13 +3,13 @@ pub mod cell;
 use std::collections::HashMap;
 use std::fmt;
 use std::convert::TryFrom;
-use gust::{Graph, Edge};
+use gust::Graph;
 use line_rs::*;
 use rand::Rng;
 use cell::{HasID, GridCoords, GridCell};
 
 #[derive(Debug)]
-pub struct Neighbors<'a, C: GridCell + std::fmt::Debug> {
+pub struct Neighbors<'a, C: GridCell> {
   pub north: Option<&'a C>,
   pub east: Option<&'a C>,
   pub south: Option<&'a C>,
@@ -17,14 +17,14 @@ pub struct Neighbors<'a, C: GridCell + std::fmt::Debug> {
 }
 
 #[derive(Debug)]
-pub struct Grid<C: GridCell + std::fmt::Debug> {
+pub struct Grid<C: GridCell> {
   height: usize,
   width: usize,
   cells: HashMap<<C as HasID>::ID_TYPE, C>,
   graph: Graph<C>,
 }
 
-impl<C: GridCell + std::fmt::Debug> Grid<C> {
+impl<C: GridCell> Grid<C> {
   pub fn new(height: usize, width: usize) -> Grid<C> {
     let mut grid = Grid {
       height,
@@ -110,7 +110,7 @@ impl<C: GridCell + std::fmt::Debug> Grid<C> {
     }
   }
 
-  pub fn links(&self, cell: &C) -> Vec<&Edge<C>> {
+  pub fn links(&self, cell: &C) -> Vec<&<C as HasID>::ID_TYPE> {
     self.graph.get_adjacent(cell.get_id())
   }
 
@@ -247,7 +247,7 @@ impl<C: GridCell + std::fmt::Debug> Grid<C> {
     let black = image::Rgb { data: [0, 0, 0] };
 
     let mut img: image::RgbImage = image::ImageBuffer::from_pixel(grid_width, grid_height, white);
-    for (cell_id, cell) in self.cells.iter() {
+    for (_, cell) in self.cells.iter() {
       let neighbors = self.neighbors(cell);
       let links = self.links(cell);
 
@@ -259,7 +259,7 @@ impl<C: GridCell + std::fmt::Debug> Grid<C> {
 
       match neighbors.west {
         Some(west) => {
-          if !links.iter().any(|link| link.leads_from_to(cell_id, west.get_id())) {
+          if !links.iter().any(|linked_cell_id| linked_cell_id == &west.get_id()) {
             img = Self::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
           }
         },
@@ -270,7 +270,7 @@ impl<C: GridCell + std::fmt::Debug> Grid<C> {
 
       match neighbors.south {
         Some(south) => {
-          if !links.iter().any(|link| link.leads_from_to(cell_id, south.get_id())) {
+          if !links.iter().any(|linked_cell_id| linked_cell_id == &south.get_id()) {
             img = Self::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
           }
         },
@@ -294,9 +294,53 @@ impl<C: GridCell + std::fmt::Debug> Grid<C> {
 
     img.save(path).unwrap();
   }
+
+//   pub fn draw_solution(&self, img: image::RgbImage, cell_size: u32, solution: &Vec<<C as HasID>::ID_TYPE>) -> image::RgbImage{
+//     let padding_px = 5;
+//     let padding_total = padding_px * 2;
+
+//     let grid_width_u32;
+//     if let Ok(width_u32) = u32::try_from(self.width) {
+//       grid_width_u32 = width_u32
+//     } else {
+//       panic!("Grid width is too large to convert into an image (u32 max)")
+//     }
+
+//     let grid_height_u32;
+//     if let Ok(height_u32) = u32::try_from(self.width) {
+//       grid_height_u32 = height_u32
+//     } else {
+//       panic!("Grid height is too large to convert into an image (u32 max)")
+//     }
+
+//     let grid_width = (grid_width_u32 * cell_size) + padding_total;
+//     let grid_height = (grid_height_u32 * cell_size) + padding_total;
+
+//     let green = image::Rgb { data: [120, 255, 120] };
+//     // let black = image::Rgb { data: [0, 0, 0] };
+
+//     for cell_id in solution {
+//       let cell = grid.cell_at(&cell_id).unwrap();
+
+//     }
+
+//     let top_y = padding_px + (grid_height_u32 * cell_size);
+//     let top_x = padding_px;
+//     let top_x2 = padding_px + (grid_width_u32 * cell_size);
+//     img = Self::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
+
+//     let right_y = padding_px;
+//     let right_x = padding_px + (grid_width_u32 * cell_size);
+//     let right_y2 = padding_px + (grid_height_u32 * cell_size);
+//     img = Self::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
+
+//     img = image::imageops::flip_vertical(&img);
+
+//     img.save(path).unwrap();
+//   }
 }
 
-impl<C: GridCell + std::fmt::Debug> fmt::Display for Grid<C> {
+impl<C: GridCell> fmt::Display for Grid<C> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let top_corner = String::from("+");
     let top_border = String::from("---+").repeat(self.width);
@@ -316,7 +360,7 @@ impl<C: GridCell + std::fmt::Debug> fmt::Display for Grid<C> {
             top.push_str("|");
           },
           Some(cell) => {
-            if links.iter().any(|link| link.leads_to(cell.get_id())) {
+            if links.iter().any(|linked_cell_id| linked_cell_id == &cell.get_id()) {
               top.push_str(" ");
             } else {
               top.push_str("|");
@@ -331,7 +375,7 @@ impl<C: GridCell + std::fmt::Debug> fmt::Display for Grid<C> {
             bottom.push_str("---");
           },
           Some(cell) => {
-            if links.iter().any(|link| link.leads_to(cell.get_id())) {
+            if links.iter().any(|linked_cell_id| linked_cell_id == &cell.get_id()) {
               bottom.push_str("   ");
             } else {
               bottom.push_str("---");
