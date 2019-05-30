@@ -1,7 +1,7 @@
 extern crate grid;
 use grid::prelude::*;
 
-fn make_grid() -> Grid<Cell> {
+fn make_grid() -> Grid {
   let grid = Grid::new(10, 10);
   grid
 }
@@ -26,7 +26,7 @@ fn get_cell_at() {
     row_index: 0
   };
   let some_cell = grid.cell_at(&coords);
-  assert_eq!(&coords, some_cell.unwrap().get_id());
+  assert_eq!(&coords, some_cell.unwrap().coords());
   let invalid_coords = GridCoords {
     col_index: 10,
     row_index: 1
@@ -44,14 +44,14 @@ fn get_links() {
   };
   // do mutable borrows
   let cell = grid.cell_at(&id).unwrap();
-  let north_id = grid.north_id(&cell).unwrap();
-  grid.link_bidi(&id, &north_id);
+  let north = grid.north(&cell).unwrap().coords().clone();
+  grid.link_bidi(&id, &north);
   // switch to non mutable borrow
-  let grid = grid;
+  // let grid = grid;
   let cell = grid.cell_at(&id).unwrap();
   let edges = grid.links(cell);
   assert_eq!(1, edges.len());
-  assert_eq!(edges[0], &north_id);
+  assert_eq!(edges[0].coords(), &north);
 }
 
 #[test]
@@ -127,6 +127,7 @@ fn to_image_test() {
   grid.to_img("test-output/test.png", 5);
 }
 
+#[ignore]
 #[test]
 fn shortest_path() {
   let grid = make_grid();
@@ -144,4 +145,22 @@ fn shortest_path() {
   println!("Done calculating distances");
   println!("{}", grid);
   println!("{:#?}", distances.shortest_path_to(&grid, &destination))
+}
+
+#[test]
+fn to_image_with_solution_test() {
+  let grid = make_grid();
+
+  let grid = sidewinder::apply_to(grid);
+  println!("{}", grid);
+  // grid.to_img("test-output/test.png", 5);
+  let distances = solutions::dijkstra::Dijkstra::new(&grid, &GridCoords {
+    col_index: 0,
+    row_index: 0,
+  });
+  let solution = distances.shortest_path_to(&grid, &GridCoords {
+    col_index: 2,
+    row_index: 2,
+  });
+  grid.to_img_with_solution("test-output/solution.png", 6, &solution);
 }

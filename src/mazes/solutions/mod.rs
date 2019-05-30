@@ -5,27 +5,27 @@ pub mod dijkstra {
   use crate::grid::Grid;
 
   #[derive(Debug)]
-  pub struct Dijkstra<C: GridCell> {
-    distances: HashMap<<C as HasID>::ID_TYPE, usize>,
-    origin: <C as HasID>::ID_TYPE,
+  pub struct Dijkstra {
+    distances: HashMap<GridCoords, usize>,
+    origin: GridCoords,
   }
 
-  impl<C: GridCell> Dijkstra<C> {
-    pub fn new(grid: &Grid<C>, origin: &<C as HasID>::ID_TYPE) -> Dijkstra<C> {
+  impl Dijkstra {
+    pub fn new(grid: &Grid, origin: &GridCoords) -> Dijkstra {
       let mut distances = HashMap::new();
-      let mut frontier: VecDeque<&<C as HasID>::ID_TYPE> = VecDeque::new();
+      let mut frontier: VecDeque<&GridCoords> = VecDeque::new();
       let mut visited = HashSet::new();
       frontier.push_back(origin);
       distances.insert(origin.clone(), 0);
-      while let Some(cell_id) = frontier.pop_front() {
-        visited.insert(cell_id);
-        let current_distance = distances.get(cell_id).unwrap();
+      while let Some(coords) = frontier.pop_front() {
+        visited.insert(coords);
+        let current_distance = distances.get(coords).unwrap();
         let next_distance = current_distance + 1;
-        let cell = grid.cell_at(cell_id).expect(format!("No cell found with id, {:?}", cell_id).as_ref());
+        let cell = grid.cell_at(coords).expect(format!("No cell found at coords, {:?}", coords).as_ref());
         for to in grid.links(cell) {
-          if !visited.contains(to) {
-            distances.insert(to.clone(), next_distance);
-            frontier.push_back(to);
+          if !visited.contains(to.coords()) {
+            distances.insert(to.coords().clone(), next_distance);
+            frontier.push_back(to.coords());
           }
         }
       }
@@ -35,26 +35,25 @@ pub mod dijkstra {
       }
     }
 
-    pub fn shortest_path_to<'a>(&self, grid: &Grid<C>, dest: &<C as HasID>::ID_TYPE) -> Vec<<C as HasID>::ID_TYPE> {
+    pub fn shortest_path_to<'a>(&self, grid: &Grid, dest: &GridCoords) -> Vec<GridCoords> {
       let mut path = Vec::new();
       let mut next = Some(dest);
       let mut visited = HashSet::new();
-      if &self.origin == dest {
-        path.push(dest.clone());
-        return path;
-      }
-      while let Some(id) = next {
-        path.push(id.clone());
-        visited.insert(id);
+      while let Some(coords) = next {
+        path.push(coords.clone());
+        if &self.origin == coords {
+          return path;
+        }
+        visited.insert(coords);
         next = None;
-        let cell = grid.cell_at(&id).unwrap();
+        let cell = grid.cell_at(coords).unwrap();
         let mut min_dist = &usize::max_value();
-        for linked_cell_id in grid.links(cell) {
-          if !visited.contains(&linked_cell_id) {
-            let distance = self.distances.get(&linked_cell_id).unwrap();
+        for linked_cell in grid.links(cell) {
+          if !visited.contains(linked_cell.coords()) {
+            let distance = self.distances.get(linked_cell.coords()).unwrap();
             if distance <= min_dist {
               min_dist = distance;
-              next = Some(linked_cell_id);
+              next = Some(linked_cell.coords());
             }
           }
         }

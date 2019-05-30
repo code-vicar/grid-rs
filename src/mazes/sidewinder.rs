@@ -1,5 +1,5 @@
 use crate::grid::Grid;
-use crate::grid::cell::*;
+use crate::grid::cell::GridCoords;
 use super::CoinFlip;
 use rand::prelude::*;
 
@@ -14,11 +14,11 @@ macro_rules! close_run {
       }
       let mut rng = thread_rng();
       let run_idx = rng.gen_range(0, $run.len());
-      let run_cell_id = $run.get(run_idx).unwrap();
+      let run_cell_coords = $run.get(run_idx).unwrap();
       // link a random cell in the run to the north
-      let north = $grid.north_id($grid.cell_at(&run_cell_id).unwrap());
-      if let Some(north_id) = north {
-        $grid.link_bidi(run_cell_id, &north_id);
+      let north = $grid.north($grid.cell_at(run_cell_coords).unwrap());
+      if let Some(north) = north {
+        $grid.link_bidi(run_cell_coords, &north.coords().clone());
       }
       // clear this run
       $run.clear();
@@ -26,7 +26,7 @@ macro_rules! close_run {
   };
 }
 
-pub fn apply_to<C: GridCell + std::fmt::Debug>(mut grid: Grid<C>) -> Grid<C> {
+pub fn apply_to(mut grid: Grid) -> Grid {
   let top_row_idx;
   if grid.height() > 0 {
     top_row_idx = grid.height() - 1;
@@ -35,11 +35,11 @@ pub fn apply_to<C: GridCell + std::fmt::Debug>(mut grid: Grid<C>) -> Grid<C> {
   }
   let rows = grid.rows();
   let mut row_idx = 0;
-  for row in rows {
-    let mut run: Vec<C::ID_TYPE> = Vec::new();
+  for ref row in rows {
+    let mut run: Vec<&GridCoords> = Vec::new();
     // iterate over cells in the row
-    for id in row {
-      let cell = grid.cell_at(&id).unwrap();
+    for ref id in row {
+      let cell = grid.cell_at(id).unwrap();
       run.push(id); // add current cell to the run
       if row_idx == top_row_idx {
         continue; // top row can't close runs so just skip that part

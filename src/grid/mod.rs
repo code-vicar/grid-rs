@@ -1,31 +1,31 @@
 pub mod cell;
+mod img;
 
 use std::collections::HashMap;
 use std::fmt;
-use std::convert::TryFrom;
 use gust::Graph;
-use line_rs::*;
 use rand::Rng;
-use cell::{HasID, GridCoords, GridCell};
+use cell::*;
+use img::*;
 
 #[derive(Debug)]
-pub struct Neighbors<'a, C: GridCell> {
-  pub north: Option<&'a C>,
-  pub east: Option<&'a C>,
-  pub south: Option<&'a C>,
-  pub west: Option<&'a C>
+pub struct Neighbors<'a> {
+  pub north: Option<&'a Cell>,
+  pub east: Option<&'a Cell>,
+  pub south: Option<&'a Cell>,
+  pub west: Option<&'a Cell>
 }
 
 #[derive(Debug)]
-pub struct Grid<C: GridCell> {
+pub struct Grid {
   height: usize,
   width: usize,
-  cells: HashMap<<C as HasID>::ID_TYPE, C>,
-  graph: Graph<C>,
+  cells: HashMap<GridCoords, Cell>,
+  graph: Graph<Cell>,
 }
 
-impl<C: GridCell> Grid<C> {
-  pub fn new(height: usize, width: usize) -> Grid<C> {
+impl Grid {
+  pub fn new(height: usize, width: usize) -> Grid {
     let mut grid = Grid {
       height,
       width,
@@ -38,26 +38,22 @@ impl<C: GridCell> Grid<C> {
           col_index,
           row_index
         };
-        let cell = C::new_from_id(C::coords_as_id(coords));
-        grid.cells.insert(cell.get_id().clone(), cell);
+        let cell = Cell::new(&coords);
+        grid.cells.insert(coords, cell);
       }
     }
     grid
   }
 
-  pub fn cells(&self) -> &HashMap<<C as HasID>::ID_TYPE, C> {
+  pub fn cells(&self) -> &HashMap<GridCoords, Cell> {
     &self.cells
   }
 
-  pub fn cell_ids(&self) -> Vec<<C as HasID>::ID_TYPE> {
-    self.cells.iter().map(|(cell_id, _)| cell_id.clone()).collect()
+  pub fn cell_at(&self, coords: &GridCoords) -> Option<&Cell> {
+    self.cells.get(coords)
   }
 
-  pub fn cell_at(&self, cell_id: &<C as HasID>::ID_TYPE) -> Option<&C> {
-    self.cells.get(cell_id)
-  }
-
-  fn _each_row(&self, reverse: bool) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+  fn _each_row(&self, reverse: bool) -> Vec<Vec<GridCoords>> {
     let mut rows = Vec::new();
     if self.height == 0 {
       return rows;
@@ -70,38 +66,51 @@ impl<C: GridCell> Grid<C> {
       } else {
         row_index = idx;
       }
-      let mut ids = Vec::new();
+      let mut coords = Vec::new();
       for col_index in 0..self.width {
-        ids.push(C::coords_as_id(GridCoords {
+        coords.push(GridCoords {
           col_index,
           row_index
-        }));
+        });
       }
-      rows.push(ids);
+      rows.push(coords);
     }
     rows
   }
 
-  pub fn rows(&self) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+  pub fn coords(&self) -> Vec<GridCoords> {
+    let mut coords = Vec::new();
+    for col_index in 0..self.width {
+      for row_index in 0..self.height {
+        coords.push(GridCoords {
+          col_index,
+          row_index
+        });
+      }
+    }
+    coords
+  }
+
+  pub fn rows(&self) -> Vec<Vec<GridCoords>> {
     self._each_row(false)
   }
 
-  pub fn rows_reverse(&self) -> Vec<Vec<<C as HasID>::ID_TYPE>> {
+  pub fn rows_reverse(&self) -> Vec<Vec<GridCoords>> {
     self._each_row(true)
   }
 
-  pub fn rand_cell(&self) -> &C {
+  pub fn rand_cell(&self) -> &Cell {
      let row_index = rand::thread_rng().gen_range(0, self.width);
      let col_index = rand::thread_rng().gen_range(0, self.height);
      // we can unwrap here since the calculation is
      // bound to the size of the grid
-     self.cell_at(&C::coords_as_id(GridCoords {
+     self.cell_at(&GridCoords {
         row_index,
         col_index
-     })).unwrap()
+     }).unwrap()
   }
 
-  pub fn neighbors(&self, cell: &C) -> Neighbors<C> {
+  pub fn neighbors(&self, cell: &Cell) -> Neighbors {
     Neighbors {
       north: self.north(cell),
       east: self.east(cell),
@@ -110,15 +119,17 @@ impl<C: GridCell> Grid<C> {
     }
   }
 
-  pub fn links(&self, cell: &C) -> Vec<&<C as HasID>::ID_TYPE> {
-    self.graph.get_adjacent(cell.get_id())
+  pub fn links(&self, cell: &Cell) -> Vec<&Cell> {
+    self.graph.get_adjacent(cell.coords()).into_iter().map(|coords| {
+      self.cell_at(coords).unwrap()
+    }).collect()
   }
 
-  pub fn link(&mut self, source: &C::ID_TYPE, destination: &C::ID_TYPE) {
+  pub fn link(&mut self, source: &GridCoords, destination: &GridCoords) {
     self.graph.add_edge(source.clone(), destination.clone());
   }
 
-  pub fn link_bidi(&mut self, source: &C::ID_TYPE, destination: &C::ID_TYPE) {
+  pub fn link_bidi(&mut self, source: &GridCoords, destination: &GridCoords) {
     self.graph.add_edge_bidi(source.clone(), destination.clone());
   }
 
@@ -130,217 +141,67 @@ impl<C: GridCell> Grid<C> {
     self.width
   }
 
-  pub fn north(&self, cell: &C) -> Option<&C> {
+  pub fn north(&self, cell: &Cell) -> Option<&Cell> {
     let north_coords = cell.north_coords();
     match north_coords {
       Some(coords) => {
         if coords.row_index >= self.height {
           return None
         }
-        self.cell_at(&C::coords_as_id(coords))
+        self.cell_at(&coords)
       }
       None => None
     }
   }
 
-  pub fn north_id(&self, cell: &C) -> Option<C::ID_TYPE> {
-    match self.north(cell) {
-      Some(cell) => {
-        Some(cell.get_id().clone())
-      }
-      None => None
-    }
-  }
-
-  pub fn east(&self, cell: &C) -> Option<&C> {
+  pub fn east(&self, cell: &Cell) -> Option<&Cell> {
     let east_coords = cell.east_coords();
     match east_coords {
       Some(coords) => {
         if coords.col_index >= self.width {
           return None
         }
-        self.cell_at(&C::coords_as_id(coords))
+        self.cell_at(&coords)
       }
       None => None
     }
   }
 
-  pub fn east_id(&self, cell: &C) -> Option<C::ID_TYPE> {
-    match self.east(cell) {
-      Some(cell) => {
-        Some(cell.get_id().clone())
-      }
-      None => None
-    }
-  }
-
-  pub fn south(&self, cell: &C) -> Option<&C> {
+  pub fn south(&self, cell: &Cell) -> Option<&Cell> {
     let south_coords = cell.south_coords();
     match south_coords {
       Some(coords) => {
-        self.cell_at(&C::coords_as_id(coords))
+        self.cell_at(&coords)
       }
       None => None
     }
   }
 
-  pub fn south_id(&self, cell: &C) -> Option<C::ID_TYPE> {
-    match self.south(cell) {
-      Some(cell) => {
-        Some(cell.get_id().clone())
-      }
-      None => None
-    }
-  }
-
-  pub fn west(&self, cell: &C) -> Option<&C> {
+  pub fn west(&self, cell: &Cell) -> Option<&Cell> {
     let west_coords = cell.west_coords();
     match west_coords {
       Some(coords) => {
-        self.cell_at(&C::coords_as_id(coords))
+        self.cell_at(&coords)
       }
       None => None
     }
   }
 
-  pub fn west_id(&self, cell: &C) -> Option<C::ID_TYPE> {
-    match self.west(cell) {
-      Some(cell) => {
-        Some(cell.get_id().clone())
-      }
-      None => None
-    }
+  pub fn to_img(&self, path: &str, cell_size: u32) -> GridImage {
+    let grid_image = to_img(self, cell_size);
+    grid_image.canvas.save(path).unwrap();
+    grid_image
   }
 
-  fn draw_line(mut img: image::RgbImage, color: image::Rgb<u8>, (x1, y1): (u32, u32), (x2, y2): (u32, u32)) -> image::RgbImage {
-    let p1 = bresenham::Point::new(x1, y1);
-    let p2 = bresenham::Point::new(x2, y2);
-    let line = bresenham::calculate_line(p1, p2);
-    for point in line {
-      img.put_pixel(point.x, point.y, color);
-    };
-    img
+  pub fn to_img_with_solution(&self, path: &str, cell_size: u32, solution: &Vec<GridCoords>) -> GridImage {
+    let mut grid_image = to_img(self, cell_size);
+    grid_image = draw_solution(grid_image, solution);
+    grid_image.canvas.save(path).unwrap();
+    grid_image
   }
-
-  pub fn to_img(&self, path: &str, cell_size: u32) {
-    let padding_px = 5;
-    let padding_total = padding_px * 2;
-
-    let grid_width_u32;
-    if let Ok(width_u32) = u32::try_from(self.width) {
-      grid_width_u32 = width_u32
-    } else {
-      panic!("Grid width is too large to convert into an image (u32 max)")
-    }
-
-    let grid_height_u32;
-    if let Ok(height_u32) = u32::try_from(self.width) {
-      grid_height_u32 = height_u32
-    } else {
-      panic!("Grid height is too large to convert into an image (u32 max)")
-    }
-
-    let grid_width = (grid_width_u32 * cell_size) + padding_total;
-    let grid_height = (grid_height_u32 * cell_size) + padding_total;
-
-    let white = image::Rgb { data: [255, 255, 255] };
-    let black = image::Rgb { data: [0, 0, 0] };
-
-    let mut img: image::RgbImage = image::ImageBuffer::from_pixel(grid_width, grid_height, white);
-    for (_, cell) in self.cells.iter() {
-      let neighbors = self.neighbors(cell);
-      let links = self.links(cell);
-
-      let coords = cell.coords();
-      let origin_x = (u32::try_from(coords.col_index).unwrap() * cell_size) + padding_px;
-      let origin_y = (u32::try_from(coords.row_index).unwrap() * cell_size) + padding_px;
-      let left_wall_y = origin_y + cell_size;
-      let bot_wall_x = origin_x + cell_size;
-
-      match neighbors.west {
-        Some(west) => {
-          if !links.iter().any(|linked_cell_id| linked_cell_id == &west.get_id()) {
-            img = Self::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
-          }
-        },
-        None => {
-          img = Self::draw_line(img, black, (origin_x, origin_y), (origin_x, left_wall_y));
-        }
-      }
-
-      match neighbors.south {
-        Some(south) => {
-          if !links.iter().any(|linked_cell_id| linked_cell_id == &south.get_id()) {
-            img = Self::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
-          }
-        },
-        None => {
-          img = Self::draw_line(img, black, (origin_x, origin_y), (bot_wall_x, origin_y));
-        }
-      }
-    }
-
-    let top_y = padding_px + (grid_height_u32 * cell_size);
-    let top_x = padding_px;
-    let top_x2 = padding_px + (grid_width_u32 * cell_size);
-    img = Self::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
-
-    let right_y = padding_px;
-    let right_x = padding_px + (grid_width_u32 * cell_size);
-    let right_y2 = padding_px + (grid_height_u32 * cell_size);
-    img = Self::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
-
-    img = image::imageops::flip_vertical(&img);
-
-    img.save(path).unwrap();
-  }
-
-//   pub fn draw_solution(&self, img: image::RgbImage, cell_size: u32, solution: &Vec<<C as HasID>::ID_TYPE>) -> image::RgbImage{
-//     let padding_px = 5;
-//     let padding_total = padding_px * 2;
-
-//     let grid_width_u32;
-//     if let Ok(width_u32) = u32::try_from(self.width) {
-//       grid_width_u32 = width_u32
-//     } else {
-//       panic!("Grid width is too large to convert into an image (u32 max)")
-//     }
-
-//     let grid_height_u32;
-//     if let Ok(height_u32) = u32::try_from(self.width) {
-//       grid_height_u32 = height_u32
-//     } else {
-//       panic!("Grid height is too large to convert into an image (u32 max)")
-//     }
-
-//     let grid_width = (grid_width_u32 * cell_size) + padding_total;
-//     let grid_height = (grid_height_u32 * cell_size) + padding_total;
-
-//     let green = image::Rgb { data: [120, 255, 120] };
-//     // let black = image::Rgb { data: [0, 0, 0] };
-
-//     for cell_id in solution {
-//       let cell = grid.cell_at(&cell_id).unwrap();
-
-//     }
-
-//     let top_y = padding_px + (grid_height_u32 * cell_size);
-//     let top_x = padding_px;
-//     let top_x2 = padding_px + (grid_width_u32 * cell_size);
-//     img = Self::draw_line(img, black, (top_x, top_y), (top_x2, top_y));
-
-//     let right_y = padding_px;
-//     let right_x = padding_px + (grid_width_u32 * cell_size);
-//     let right_y2 = padding_px + (grid_height_u32 * cell_size);
-//     img = Self::draw_line(img, black, (right_x, right_y), (right_x, right_y2));
-
-//     img = image::imageops::flip_vertical(&img);
-
-//     img.save(path).unwrap();
-//   }
 }
 
-impl<C: GridCell> fmt::Display for Grid<C> {
+impl fmt::Display for Grid {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let top_corner = String::from("+");
     let top_border = String::from("---+").repeat(self.width);
@@ -360,7 +221,7 @@ impl<C: GridCell> fmt::Display for Grid<C> {
             top.push_str("|");
           },
           Some(cell) => {
-            if links.iter().any(|linked_cell_id| linked_cell_id == &cell.get_id()) {
+            if links.iter().any(|linked_cell| *linked_cell == cell) {
               top.push_str(" ");
             } else {
               top.push_str("|");
@@ -375,7 +236,7 @@ impl<C: GridCell> fmt::Display for Grid<C> {
             bottom.push_str("---");
           },
           Some(cell) => {
-            if links.iter().any(|linked_cell_id| linked_cell_id == &cell.get_id()) {
+            if links.iter().any(|linked_cell| *linked_cell == cell) {
               bottom.push_str("   ");
             } else {
               bottom.push_str("---");
