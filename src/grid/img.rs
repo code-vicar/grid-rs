@@ -1,6 +1,6 @@
+use std::collections::*;
 use super::{Grid, GridCoords};
-// use super::cell::{HasID, GridCell};
-use std::convert::TryFrom;
+use std::convert::{TryInto, TryFrom};
 use line_rs::*;
 
 pub struct GridImage {
@@ -22,6 +22,7 @@ fn get_origin(padding: u32, cell_size: u32, cell: &GridCoords) -> (u32, u32) {
   (origin_x, origin_y)
 }
 
+// get a point relative to origin
 fn get_point(origin: (u32, u32), cell_size: u32, point: CellPoint) -> (u32, u32) {
   match point {
     CellPoint::TopLeft => {
@@ -47,6 +48,28 @@ fn draw_line(mut canvas: image::RgbImage, color: image::Rgb<u8>, (x1, y1): (u32,
     canvas.put_pixel(point.x, point.y, color);
   };
   canvas
+}
+
+fn fill_square(mut canvas: image::RgbImage, color: image::Rgb<u8>, origin: (u32, u32), cell_size: u32) -> image::RgbImage {
+  for px_x in 0..cell_size {
+    for px_y in 0..cell_size {
+      canvas.put_pixel(origin.0 + px_x, origin.1 + px_y, color);
+    }
+  }
+  canvas
+}
+
+fn modify_color_by_distance(max_distance: u32, distance: u32, color: image::Rgb<u8>) -> image::Rgb<u8> {
+  let fraction = (f64::try_from(distance).unwrap() / f64::try_from(max_distance).unwrap()) as f32;
+  let fraction = 1.0 - fraction;
+  let [r, g, b] = color.data;
+  let r_float = f32::try_from(r).unwrap();
+  let g_float = f32::try_from(g).unwrap();
+  let b_float = f32::try_from(b).unwrap();
+  let r_graded = ((r_float * fraction).trunc() as i32).try_into().unwrap();
+  let g_graded = ((g_float * fraction).trunc() as i32).try_into().unwrap();
+  let b_graded = ((b_float * fraction).trunc() as i32).try_into().unwrap();
+  image::Rgb([r_graded, g_graded, b_graded])
 }
 
 pub fn to_img(grid: &Grid, cell_size: u32) -> GridImage {
@@ -141,6 +164,20 @@ pub fn draw_solution(mut grid_image: GridImage, solution: &Vec<GridCoords>) -> G
       canvas = draw_line(canvas, green, trailing_center_point, center_point);
     }
     trailing_point = Some(center_point);
+  }
+  grid_image.canvas = image::imageops::flip_vertical(&canvas);
+  grid_image
+}
+
+pub fn draw_distance_gradation(mut grid_image: GridImage, max_distance: u32, distances: &HashMap<GridCoords, u32>, color: image::Rgb<u8>) -> GridImage {
+  let padding_px = grid_image.padding;
+  let cell_size = grid_image.cell_size;
+
+  let mut canvas = image::imageops::flip_vertical(&grid_image.canvas);
+  for (coords, distance) in distances {
+    let graded_color = modify_color_by_distance(max_distance, distance.to_owned(), color);
+    let origin = get_origin(padding_px, cell_size, coords);
+    canvas = fill_square(canvas, graded_color, origin, cell_size);
   }
   grid_image.canvas = image::imageops::flip_vertical(&canvas);
   grid_image

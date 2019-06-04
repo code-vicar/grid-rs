@@ -6,13 +6,15 @@ pub mod dijkstra {
 
   #[derive(Debug)]
   pub struct Dijkstra {
-    distances: HashMap<GridCoords, usize>,
-    origin: GridCoords,
+    pub distances: HashMap<GridCoords, u32>,
+    pub origin: GridCoords,
+    pub max_distance: u32,
   }
 
   impl Dijkstra {
     pub fn new(grid: &Grid, origin: &GridCoords) -> Dijkstra {
       let mut distances = HashMap::new();
+      let mut max_distance = 0;
       let mut frontier: VecDeque<&GridCoords> = VecDeque::new();
       let mut visited = HashSet::new();
       frontier.push_back(origin);
@@ -21,6 +23,9 @@ pub mod dijkstra {
         visited.insert(coords);
         let current_distance = distances.get(coords).unwrap();
         let next_distance = current_distance + 1;
+        if next_distance > max_distance {
+          max_distance = next_distance;
+        }
         let cell = grid.cell_at(coords).expect(format!("No cell found at coords, {:?}", coords).as_ref());
         for to in grid.links(cell) {
           if !visited.contains(to.coords()) {
@@ -32,6 +37,7 @@ pub mod dijkstra {
       Dijkstra {
         distances,
         origin: origin.clone(),
+        max_distance,
       }
     }
 
@@ -47,7 +53,7 @@ pub mod dijkstra {
         visited.insert(coords);
         next = None;
         let cell = grid.cell_at(coords).unwrap();
-        let mut min_dist = &usize::max_value();
+        let mut min_dist = &u32::max_value();
         for linked_cell in grid.links(cell) {
           if !visited.contains(linked_cell.coords()) {
             let distance = self.distances.get(linked_cell.coords()).unwrap();

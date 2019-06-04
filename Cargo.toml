@@ -1,8 +1,11 @@
 [package]
-name = "grid"
+name = "grid-rs"
 version = "0.1.0"
 authors = ["Scott Vickers <scott.w.vickers@gmail.com>"]
 edition = "2018"
+
+[features]
+wasm-bindgen = ["rand/wasm-bindgen"]
 
 [dependencies]
 gust = { path = "../gust", version = "0.1.0" }

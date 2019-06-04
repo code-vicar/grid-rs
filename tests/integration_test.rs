@@ -1,5 +1,6 @@
-extern crate grid;
-use grid::prelude::*;
+extern crate grid_rs;
+use grid_rs::grid::img::{to_img, draw_distance_gradation};
+use grid_rs::prelude::*;
 
 fn make_grid() -> Grid {
   let grid = Grid::new(10, 10);
@@ -97,7 +98,6 @@ fn binary_tree_maze() {
   println!("{}", grid);
 }
 
-#[ignore]
 #[test]
 fn binary_tree_maze_to_image_test() {
   let grid = make_grid();
@@ -153,14 +153,28 @@ fn to_image_with_solution_test() {
 
   let grid = sidewinder::apply_to(grid);
   println!("{}", grid);
-  // grid.to_img("test-output/test.png", 5);
   let distances = solutions::dijkstra::Dijkstra::new(&grid, &GridCoords {
-    col_index: 0,
-    row_index: 0,
+    col_index: 9,
+    row_index: 9,
   });
   let solution = distances.shortest_path_to(&grid, &GridCoords {
-    col_index: 2,
-    row_index: 2,
+    col_index: 0,
+    row_index: 1,
   });
   grid.to_img_with_solution("test-output/solution.png", 6, &solution);
+}
+
+#[test]
+fn to_image_with_distance_gradation_test() {
+  let grid = make_grid();
+
+  let grid = sidewinder::apply_to(grid);
+  let grid_image = to_img(&grid, 6);
+  let distances = solutions::dijkstra::Dijkstra::new(&grid, &GridCoords {
+    col_index: 5,
+    row_index: 5,
+  });
+  let dark_green = image::Rgb { data: [155, 255, 155] };
+  let grid_image = draw_distance_gradation(grid_image, distances.max_distance, &distances.distances, dark_green);
+  grid_image.canvas.save("test-output/distance_gradation.png").unwrap();
 }

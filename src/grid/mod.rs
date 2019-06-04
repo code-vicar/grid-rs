@@ -1,5 +1,5 @@
 pub mod cell;
-mod img;
+pub mod img;
 
 use std::collections::HashMap;
 use std::fmt;
